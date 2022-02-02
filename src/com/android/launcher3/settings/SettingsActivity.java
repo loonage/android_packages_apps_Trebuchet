@@ -27,14 +27,17 @@ import static com.android.launcher3.InvariantDeviceProfile.TYPE_TABLET;
 import static com.android.launcher3.states.RotationHelper.ALLOW_ROTATION_PREFERENCE_KEY;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -50,6 +53,7 @@ import androidx.preference.PreferenceFragmentCompat.OnPreferenceStartScreenCallb
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceGroup.PreferencePositionCallback;
 import androidx.preference.PreferenceScreen;
+import androidx.preference.SwitchPreferenceCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.launcher3.BuildConfig;
@@ -57,11 +61,14 @@ import com.android.launcher3.Flags;
 import com.android.launcher3.InvariantDeviceProfile;
 import com.android.launcher3.LauncherFiles;
 import com.android.launcher3.R;
+import com.android.launcher3.config.FeatureFlags;
 import com.android.launcher3.lineage.LineageUtils;
 import com.android.launcher3.lineage.trust.TrustAppsActivity;
 import com.android.launcher3.states.RotationHelper;
 import com.android.launcher3.util.DisplayController;
+import com.android.launcher3.util.PluginManagerWrapper;
 import com.android.launcher3.util.SettingsCache;
+import com.android.launcher3.Utilities;
 
 /**
  * Settings activity for Launcher. Currently implements the following setting: Allow rotation
@@ -184,6 +191,10 @@ public class SettingsActivity extends FragmentActivity
         private String mHighLightKey;
 
         private boolean mPreferenceHighlighted = false;
+
+        protected static final String GSA_PACKAGE = "com.google.android.googlequicksearchbox";
+
+        private Preference mShowGoogleAppPref, mDockSearchPref;
 
         @Override
         public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -364,8 +375,31 @@ public class SettingsActivity extends FragmentActivity
                     return true;
                 case KEY_SUGGESTIONS:
                     return LineageUtils.isPackageEnabled(getActivity(), SUGGESTIONS_PACKAGE);
+                case Utilities.KEY_DOCK_SEARCH:
+                    mDockSearchPref = preference;
+                    ((SwitchPreferenceCompat) mDockSearchPref).setChecked(Utilities.showQSB(getContext()));
+                    mDockSearchPref.setOnPreferenceChangeListener((pref, newValue) -> {
+                        Toast.makeText(getContext(), R.string.flag_wont_be_applied, Toast.LENGTH_LONG).show();
+                        return true;
+                    });
+                    updateIsGoogleAppEnabled();
+                    return true;
             }
             return true;
+        }
+
+        public static boolean isGSAEnabled(Context context) {
+            try {
+                return context.getPackageManager().getApplicationInfo(GSA_PACKAGE, 0).enabled;
+            } catch (PackageManager.NameNotFoundException e) {
+                return false;
+            }
+        }
+
+        private void updateIsGoogleAppEnabled() {
+            if (mShowGoogleAppPref != null) {
+                mShowGoogleAppPref.setEnabled(isGSAEnabled(getContext()));
+            }
         }
 
         @Override
@@ -383,6 +417,7 @@ public class SettingsActivity extends FragmentActivity
             if (mRestartOnResume) {
                 recreateActivityNow();
             }
+            updateIsGoogleAppEnabled();
         }
 
         @Override
