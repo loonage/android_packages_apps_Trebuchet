@@ -196,6 +196,14 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import android.app.smartspace.SmartspaceTarget;
+import com.android.launcher3.model.CustomQuickstepModelDelegate.SmartspaceItem;
+import com.android.launcher3.model.BgDataModel;
+import com.android.launcher3.qsb.LauncherUnlockAnimationController;
+import com.android.launcher3.uioverrides.QuickstepLauncher;
+import com.google.android.systemui.smartspace.BcSmartspaceDataProvider;
+import java.util.stream.Collectors;
+
 public class QuickstepLauncher extends Launcher {
 
     public static final boolean ENABLE_PIP_KEEP_CLEAR_ALGORITHM =
@@ -232,9 +240,33 @@ public class QuickstepLauncher extends Launcher {
 
     private boolean mEnableWidgetDepth;
 
+    private BcSmartspaceDataProvider mSmartspacePlugin = new BcSmartspaceDataProvider();
+    private LauncherUnlockAnimationController mUnlockAnimationController =
+            new LauncherUnlockAnimationController(this);
+
     @Override
     protected LauncherOverlayManager getDefaultOverlay() {
         return new OverlayCallbackImpl(this);
+    }
+
+    public BcSmartspaceDataProvider getSmartspacePlugin() {
+        return mSmartspacePlugin;
+    }
+
+    public LauncherUnlockAnimationController getLauncherUnlockAnimationController() {
+        return mUnlockAnimationController;
+    }
+
+    @Override
+    public void onOverlayVisibilityChanged(boolean visible) {
+        super.onOverlayVisibilityChanged(visible);
+        mUnlockAnimationController.updateSmartspaceState();
+    }
+
+    @Override
+    public void onPageEndTransition() {
+        super.onPageEndTransition();
+        mUnlockAnimationController.updateSmartspaceState();
     }
 
     @Override
@@ -454,7 +486,12 @@ public class QuickstepLauncher extends Launcher {
 
     @Override
     public void bindExtraContainerItems(FixedContainerItems item) {
-        if (item.containerId == Favorites.CONTAINER_PREDICTION) {
+        if (item.containerId == -110) {
+            List<SmartspaceTarget> targets = item.items.stream()
+                                                            .map(i -> ((SmartspaceItem) i).getSmartspaceTarget())
+                                                            .collect(Collectors.toList());
+            mSmartspacePlugin.onTargetsAvailable(targets);
+        } else if (item.containerId == Favorites.CONTAINER_PREDICTION) {
             mAllAppsPredictions = item;
             PredictionRowView<?> predictionRowView =
                     getAppsView().getFloatingHeaderView().findFixedRowByType(
@@ -475,6 +512,7 @@ public class QuickstepLauncher extends Launcher {
 
     @Override
     public void onDestroy() {
+        SystemUiProxy.INSTANCE.get(this).setLauncherUnlockAnimationController(null);
         mAppTransitionManager.onActivityDestroyed();
         if (mUnfoldTransitionProgressProvider != null) {
             mUnfoldTransitionProgressProvider.destroy();
@@ -589,6 +627,7 @@ public class QuickstepLauncher extends Launcher {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        SystemUiProxy.INSTANCE.get(this).setLauncherUnlockAnimationController(mUnlockAnimationController);
         if (savedInstanceState != null) {
             mPendingSplitSelectInfo = ObjectWrapper.unwrap(
                     savedInstanceState.getIBinder(PENDING_SPLIT_SELECT_INFO));
